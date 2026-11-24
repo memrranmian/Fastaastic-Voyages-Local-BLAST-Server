@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fastaastic Voyages - BLAST Results (Job {{ job_id[:8] }})</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body { background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .hero { background: linear-gradient(135deg, #0f172a, #1e293b); color: white; padding: 1.5rem 0; margin-bottom: 2rem; border-radius: 0 0 16px 16px; }
+        .card { border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 2px 6px rgba(0,0,0,0.04); margin-bottom: 1.5rem; }
+        .alignment-block { background-color: #f1f5f9; font-family: "Courier New", Courier, monospace; font-size: 0.9rem; padding: 1rem; border-radius: 8px; overflow-x: auto; white-space: pre; line-height: 1.4; border-left: 4px solid #0284c7; }
+        .table-hover tbody tr:hover { background-color: #f0f9ff; }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h3 class="fw-bold mb-1"><i class="bi bi-compass"></i> Fastaastic Voyages — BLAST Results</h3>
+                    <div class="small opacity-75">
+                        Program: <span class="badge bg-primary text-uppercase">{{ results.program }}</span> | 
+                        Database: <span class="badge bg-secondary">{{ results.database }}</span> | 
+                        Query: <strong>{{ results.query_id }}</strong> ({{ results.query_length }} letters) |
+                        Execution Time: <span class="badge bg-info text-dark">{{ results.elapsed_seconds }}s</span>
+                    </div>
+                </div>
+                <div>
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-arrow-left"></i> New Query</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mb-5">
+        <!-- Action / Export bar -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold text-secondary mb-0">Total Significant Hits: <span class="badge bg-dark">{{ results.total_hits }}</span></h5>
+            <div class="btn-group">
+                <span class="btn btn-outline-secondary disabled fw-semibold"><i class="bi bi-download"></i> Export:</span>
+                <a href="{{ url_for('download_results', job_id=job_id, file_format='tsv') }}" class="btn btn-outline-primary"><i class="bi bi-file-earmark-spreadsheet"></i> TSV/CSV</a>
+                <a href="{{ url_for('download_results', job_id=job_id, file_format='xml') }}" class="btn btn-outline-success"><i class="bi bi-file-earmark-code"></i> NCBI XML</a>
+                <a href="{{ url_for('download_results', job_id=job_id, file_format='json') }}" class="btn btn-outline-info"><i class="bi bi-filetype-json"></i> JSON</a>
+                <a href="{{ url_for('download_results', job_id=job_id, file_format='fasta') }}" class="btn btn-outline-dark"><i class="bi bi-file-earmark-text"></i> FASTA</a>
+            </div>
+        </div>
+
+        {% if results.total_hits == 0 %}
+            <div class="alert alert-warning py-4 text-center">
+                <h5><i class="bi bi-exclamation-triangle"></i> No significant sequence alignments found.</h5>
+                <p class="mb-0 text-muted">Try increasing your E-value expectation threshold, lowering minimum identity percentage, or checking sequence format.</p>
+            </div>
+        {% else %}
+            <!-- Summary Table -->
+            <div class="card p-3">
+                <h5 class="fw-bold text-primary mb-3"><i class="bi bi-table"></i> Hit Descriptions and Summary Metrics</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Hit ID / Accession</th>
+                                <th>Description</th>
+                                <th class="text-center">Query Coverage</th>
+                                <th class="text-center">% Identity</th>
+                                <th class="text-center">E-value</th>
+                                <th class="text-center">Bit Score</th>
+                                <th class="text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for hit in results.hits %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td><span class="font-monospace fw-semibold">{{ hit.accession or hit.hit_id }}</span></td>
+                                    <td class="small" style="max-width: 320px;" title="{{ hit.hit_def }}">{{ hit.hit_def }}</td>
+                                    <td class="text-center">
+                                        <div class="progress" style="height: 18px;">
+                                            <div class="progress-bar bg-success" role="progressbar" style="width: {{ hit.query_coverage }}%;">
+                                                {{ hit.query_coverage }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="text-center fw-bold">{{ hit.percent_identity }}%</td>
+                                    <td class="text-center font-monospace text-danger fw-bold">{{ hit.evalue }}</td>
+                                    <td class="text-center font-monospace text-primary fw-bold">{{ hit.bit_score }}</td>
+                                    <td class="text-center">
+                                        <a href="#hit-{{ loop.index }}" class="btn btn-sm btn-outline-primary py-0"><i class="bi bi-eye"></i> View</a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Alignments Section -->
+            <h4 class="fw-bold text-dark mt-4 mb-3"><i class="bi bi-bar-chart-steps"></i> Detailed Pairwise Alignments</h4>
+            {% for hit in results.hits %}
+                <div class="card p-4" id="hit-{{ loop.index }}">
+                    <div class="d-flex justify-content-between align-items-center mb-2 border-bottom pb-2">
+                        <div>
+                            <span class="badge bg-secondary me-2">Hit #{{ loop.index }}</span>
+                            <span class="fw-bold font-monospace text-primary fs-5">{{ hit.hit_id }}</span>
+                        </div>
+                        <div>
+                            <span class="badge bg-light text-dark border">Length: {{ hit.length }} bp/aa</span>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-3"><strong>Definition:</strong> {{ hit.hit_def }}</p>
+
+                    {% for hsp in hit.hsps %}
+                        <div class="mb-3">
+                            <div class="d-flex gap-3 small text-secondary mb-2">
+                                <span><strong>Score:</strong> {{ hsp.score }} bits ({{ hsp.score }})</span>
+                                <span><strong>Expect:</strong> {{ hsp.evalue }}</span>
+                                <span><strong>Identities:</strong> {{ hsp.identities }}/{{ hsp.align_len }} ({{ hsp.identity_pct }}%)</span>
+                                <span><strong>Gaps:</strong> {{ hsp.gaps }}/{{ hsp.align_len }}</span>
+                            </div>
+
+                            <div class="alignment-block">
+{% for blk in hsp.formatted_blocks %}
+Query  {{ "%-5s" | format(blk.q_num_start) }}  {{ blk.q_seq }}  {{ blk.q_num_end }}
+       {{ "     " }}  {{ blk.match }}
+Sbjct  {{ "%-5s" | format(blk.s_num_start) }}  {{ blk.s_seq }}  {{ blk.s_num_end }}
+
+{% endfor %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        {% endif %}
+    </div>
+</body>
+</html>

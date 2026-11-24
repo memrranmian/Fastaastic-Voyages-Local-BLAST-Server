@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fastaastic Voyages - Local NCBI BLAST Server</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body { background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .hero { background: linear-gradient(135deg, #1e3a8a, #0369a1); color: white; padding: 2rem 0; margin-bottom: 2rem; border-radius: 0 0 16px 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .card { border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
+        .form-label { font-weight: 600; color: #334155; font-size: 0.9rem; }
+        .badge-type { font-size: 0.75rem; text-transform: uppercase; }
+        .code-sample { cursor: pointer; color: #0284c7; text-decoration: underline; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <div class="container">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <h2 class="fw-bold mb-1"><i class="bi bi-compass"></i> Fastaastic Voyages</h2>
+                    <p class="mb-0 text-light opacity-75">High-Performance Local NCBI BLAST+ Alignment Suite (BLAST+ 2.16.0 & BioPython)</p>
+                </div>
+                <div>
+                    <span class="badge bg-success px-3 py-2"><i class="bi bi-shield-check"></i> Isolated WSL2 Env</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mb-5">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, msg in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        <strong>Notice:</strong> {{ msg }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form action="{{ url_for('submit_blast') }}" method="POST" enctype="multipart/form-data">
+            <div class="row g-4">
+                <!-- Left Column: Input Sequence -->
+                <div class="col-lg-7">
+                    <div class="card p-4 h-100">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="fw-bold text-primary mb-0"><i class="bi bi-input-cursor-text"></i> Sequence Input</h5>
+                            <div>
+                                <span class="text-muted small me-2">Sample queries:</span>
+                                <a class="code-sample me-2" onclick="loadSample('protein')">Hemoglobin (Protein)</a>
+                                <a class="code-sample me-2" onclick="loadSample('dna')">16S rRNA (DNA)</a>
+                                <a class="code-sample" onclick="loadSample('short')">Tricky Short Peptide</a>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="sequence_text" class="form-label">Paste Query Sequence (FASTA or Raw Characters):</label>
+                            <textarea class="form-control font-monospace" id="sequence_text" name="sequence_text" rows="10" placeholder=">query_id&#10;VLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH..."></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="fasta_file" class="form-label">Or Upload a FASTA file (.fa, .fasta, .txt):</label>
+                            <input class="form-control" type="file" id="fasta_file" name="fasta_file" accept=".fasta,.fa,.txt">
+                            <div class="form-text">Max file size: 2MB. Validated against IUPAC nucleotide & amino acid alphabets.</div>
+                        </div>
+
+                        <div class="form-check form-switch mt-2">
+                            <input class="form-check-input" type="checkbox" id="async_mode" name="async_mode" value="1">
+                            <label class="form-check-label fw-semibold" for="async_mode">Run as Asynchronous Background Job (returns Job ID & Status Page)</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: BLAST Options & Parameters -->
+                <div class="col-lg-5">
+                    <div class="card p-4 h-100">
+                        <h5 class="fw-bold text-primary mb-3"><i class="bi bi-sliders"></i> Alignment Parameters</h5>
+
+                        <!-- Program Selection -->
+                        <div class="mb-3">
+                            <label for="program" class="form-label">BLAST Program:</label>
+                            <select class="form-select" id="program" name="program" onchange="updateCompatibility()">
+                                <option value="blastp" selected>blastp (Protein query -> Protein DB)</option>
+                                <option value="blastn">blastn (Nucleotide query -> Nucleotide DB)</option>
+                                <option value="blastx">blastx (Translated Nucleotide query -> Protein DB)</option>
+                                <option value="tblastn">tblastn (Protein query -> Translated Nucleotide DB)</option>
+                                <option value="tblastx">tblastx (Translated Nucleotide query -> Translated Nucleotide DB)</option>
+                            </select>
+                        </div>
+
+                        <!-- Target Database Selection -->
+                        <div class="mb-3">
+                            <label for="database" class="form-label">Target Database:</label>
+                            <select class="form-select" id="database" name="database">
+                                {% for db_key, db_info in databases.items() %}
+                                    <option value="{{ db_key }}" data-type="{{ db_info.type }}">
+                                        {{ db_info.name }} ({{ db_info.type | upper }})
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <div id="db_help" class="form-text mt-1 text-muted"></div>
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label for="evalue" class="form-label">Expectation Value (E):</label>
+                                <input type="number" step="any" class="form-control" id="evalue" name="evalue" value="10.0" min="0.0000000001">
+                            </div>
+                            <div class="col-6">
+                                <label for="max_target_seqs" class="form-label">Max Target Hits:</label>
+                                <input type="number" class="form-control" id="max_target_seqs" name="max_target_seqs" value="50" min="1" max="500">
+                            </div>
+                        </div>
+
+                        <!-- Advanced Parameters -->
+                        <div class="border-top pt-3 mt-2">
+                            <h6 class="fw-bold text-secondary mb-2 small text-uppercase">Fine-tuning & Advanced Options</h6>
+                            
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label for="word_size" class="form-label">Word Size:</label>
+                                    <input type="number" class="form-control" id="word_size" name="word_size" placeholder="Default (e.g. 3 or 11)">
+                                </div>
+                                <div class="col-6">
+                                    <label for="matrix" class="form-label">Matrix (blastp/x):</label>
+                                    <select class="form-select" id="matrix" name="matrix">
+                                        <option value="BLOSUM62" selected>BLOSUM62 (Standard)</option>
+                                        <option value="BLOSUM80">BLOSUM80 (Closer)</option>
+                                        <option value="BLOSUM45">BLOSUM45 (Divergent)</option>
+                                        <option value="PAM30">PAM30 (Short)</option>
+                                        <option value="PAM70">PAM70</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="row g-2 mb-3">
+                                <div class="col-6">
+                                    <label for="perc_identity" class="form-label">Min % Identity:</label>
+                                    <input type="number" step="0.1" class="form-control" id="perc_identity" name="perc_identity" placeholder="e.g. 70" min="0" max="100">
+                                </div>
+                                <div class="col-6">
+                                    <label for="qcov_hsp_perc" class="form-label">Min Query Coverage %:</label>
+                                    <input type="number" step="0.1" class="form-control" id="qcov_hsp_perc" name="qcov_hsp_perc" placeholder="e.g. 50" min="0" max="100">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-auto">
+                            <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm">
+                                <i class="bi bi-search"></i> Execute BLAST Search
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        const samples = {
+            protein: {
+                program: "blastp",
+                db: "pdbaa",
+                seq: ">sp|P69905|HBA_HUMAN Hemoglobin subunit alpha\nVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGKKVADALTNAVAHVDDMPNALSALSDLHAHKLRVDPVNFKLLSHCLLVTLAAHLPAEFTPAVHASLDKFLASVSTVLTSKYR"
+            },
+            dna: {
+                program: "blastn",
+                db: "16S_ribosomal_RNA",
+                seq: ">16S_rRNA_test_sequence E. coli 16S fragment\nAGAGTTTGATCCTGGCTCAGATTGAACGCTGGCGGCAGGCCTAACACATGCAAGTCGAACGGTAACAGGAAGCAGCTTGCTGCTTCGCTGACGAGTGGCGGACGGGTGAGTAATGTCTGGGAAACTGCCTGATGGAGGGGGATAACTACTGGAAACGGTAGCTAATACCGCATAACGTCGCAAGACCAAAGAGGGGGACCTTCGGGCCTCTTGCCATCAGATGTGCCCAGATGGGATTAGCTAGTAGGT"
+            },
+            short: {
+                program: "blastp",
+                db: "pdbaa",
+                seq: ">Short_Peptide_Tricky_Query\nMVHLTPEEKSAV"
+            }
+        };
+
+        function loadSample(key) {
+            const item = samples[key];
+            document.getElementById('sequence_text').value = item.seq;
+            document.getElementById('program').value = item.program;
+            document.getElementById('database').value = item.db;
+            updateCompatibility();
+        }
+
+        function updateCompatibility() {
+            const prog = document.getElementById('program').value;
+            const dbSelect = document.getElementById('database');
+            const matrixSelect = document.getElementById('matrix');
+            
+            // Program compatibility logic
+            if (prog === 'blastn') {
+                dbSelect.value = "16S_ribosomal_RNA";
+                matrixSelect.disabled = true;
+            } else if (prog === 'blastp') {
+                dbSelect.value = "pdbaa";
+                matrixSelect.disabled = false;
+            } else if (prog === 'blastx') {
+                dbSelect.value = "pdbaa";
+                matrixSelect.disabled = false;
+            } else if (prog === 'tblastn') {
+                dbSelect.value = "16S_ribosomal_RNA";
+                matrixSelect.disabled = false;
+            } else if (prog === 'tblastx') {
+                dbSelect.value = "16S_ribosomal_RNA";
+                matrixSelect.disabled = true;
+            }
+        }
+        updateCompatibility();
+    </script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+# Virtual Environment
+.venv/
+env/
+venv/
+ENV/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# BLAST Databases (Do not commit large multi-gigabyte/megabyte binary databases)
+blastdb/
+*.tar.gz
+*.ndb
+*.nhr
+*.nin
+*.nog
+*.nos
+*.not
+*.nsq
+*.ntf
+*.nto
+*.pdb
+*.phr
+*.pin
+*.pog
+*.pos
+*.pot
+*.psq
+*.ptf
+*.pto
+
+# Job Workspace Folders & Output logs
+jobs/
+*.log
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Subfolder artifacts
+biassgn5/
